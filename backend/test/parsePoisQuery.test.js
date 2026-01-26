@@ -15,15 +15,14 @@ describe("parsePoisQuery", () => {
       types: []
     });
   });
-});
 
-test("parses comma-separated types", () => {
-  const result = parsePoisQuery({
-    lat: "51.5",
-    lng: "-2.6",
-    types: "cafe,gym, park"
+  test("parses comma-separated types", () => {
+    const result = parsePoisQuery({
+      lat: "51.5",
+      lng: "-2.6",
+      types: "cafe,gym, park"
+    });
+
+    expect(result.types).toEqual(["cafe", "gym", "park"]);
   });
-
-  expect(result.types).toEqual(["cafe", "gym", "park"]);
 });
-
