@@ -3,6 +3,7 @@ import express from "express";
 import { parsePoisQuery } from "../domain/parsePoisQuery.js";
 import { buildOverpassQuery } from "../domain/buildOverpassQuery.js";
 import { fetchOverpassData } from "../adapters/overpassClient.js";
+import { normalizeOverpassToGeoJson } from "../domain/normalizeOverpassToGeoJson.js";
 
 export const poisRoute = express.Router();
 
@@ -23,10 +24,9 @@ poisRoute.get("/", async (req, res) => {
     const rawData = await fetchOverpassData(overpassQuery);
 
     // 4) Return raw for now
-    res.json({
-      count: rawData.elements?.length ?? 0,
-      elements: rawData.elements ?? []
-    });
+    const geojson = normalizeOverpassToGeoJson(rawData);
+    res.json(geojson);
+
   } catch (err) {
     res.status(400).json({
       error: err.message
