@@ -3,6 +3,9 @@ export const parsePoisQuery = (q) => {
   const lng = Number(q.lng);
   const radius = q.radius == null ? 500 : Number(q.radius);
 
+  const MAX_RADIUS = 1500;
+
+  if (radius > MAX_RADIUS) throw new Error(`Radius too large (max ${MAX_RADIUS}m)`);
   if (!Number.isFinite(lat)) throw new Error("Invalid lat");
   if (!Number.isFinite(lng)) throw new Error("Invalid lng");
   if (!Number.isFinite(radius) || radius <= 0) throw new Error("Invalid radius");
