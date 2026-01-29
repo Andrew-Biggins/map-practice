@@ -7,12 +7,20 @@ import { normalizeOverpassToGeoJson } from "../domain/normalizeOverpassToGeoJson
 
 export const poisRoute = express.Router();
 
+const cache = new Map();
+const TTL_MS = 60_000;
+
+const cacheKey = ({ lat, lng, radius, types }) =>
+  `${lat.toFixed(5)}:${lng.toFixed(5)}:${radius}:${[...types].sort().join(",")}`;
+
 poisRoute.get("/", async (req, res) => {
   try {
-    // 1) Parse + validate query params
     const { lat, lng, radius, types } = parsePoisQuery(req.query);
 
-    // 2) Build Overpass QL string
+    const key = cacheKey({ lat, lng, radius, types });
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.time < TTL_MS) return res.json(hit.value);
+
     const overpassQuery = buildOverpassQuery({
       lat,
       lng,
@@ -20,16 +28,20 @@ poisRoute.get("/", async (req, res) => {
       types
     });
 
-    // 3) Call Overpass API
     const rawData = await fetchOverpassData(overpassQuery);
-
-    // 4) Return raw for now
     const geojson = normalizeOverpassToGeoJson(rawData);
-    res.json(geojson);
+
+    cache.set(key, { time: Date.now(), value: geojson });
+    return res.json(geojson);
 
   } catch (err) {
-    res.status(400).json({
-      error: err.message
-    });
+    if (res.headersSent) return;
+
+    const status = err?.response?.status; // axios errors may have this
+    if (status === 429 || status === 504) {
+      return res.status(503).json({ error: "Overpass is busy. Try again in a moment." });
+    }
+
+    return res.status(400).json({ error: err.message ?? "Unknown error" });
   }
 });

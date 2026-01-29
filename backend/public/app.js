@@ -9,6 +9,10 @@ let clickMarker = null;
 let radiusCircle = null;
 let geoJsonLayer = null;
 
+let isLoading = false;
+let currentAbort = null;
+let requestSeq = 0;
+
 const radiusInput = document.getElementById("radius");
 const typesInput = document.getElementById("types");
 const clearBtn = document.getElementById("clear");
@@ -19,7 +23,7 @@ const clearLayers = () => {
   if (geoJsonLayer) { map.removeLayer(geoJsonLayer); geoJsonLayer = null; }
 };
 
-const fetchPois = async ({ lat, lng, radius, types }) => {
+const fetchPois = async ({ lat, lng, radius, types, signal }) => {
   const params = new URLSearchParams({
     lat: String(lat),
     lng: String(lng),
@@ -27,14 +31,14 @@ const fetchPois = async ({ lat, lng, radius, types }) => {
     types: types.join(",")
   });
 
-  const res = await fetch(`/api/pois?${params.toString()}`);
+  const res = await fetch(`/api/pois?${params.toString()}`, { signal });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Request failed (${res.status})`);
   }
-
   return res.json();
 };
+
 
 const renderGeoJson = (geojson) => {
   if (geoJsonLayer) map.removeLayer(geoJsonLayer);
@@ -50,6 +54,11 @@ const renderGeoJson = (geojson) => {
 };
 
 map.on("click", async (e) => {
+  // Increment request id and cancel any in-flight request
+  const mySeq = ++requestSeq;
+  if (currentAbort) currentAbort.abort();
+  currentAbort = new AbortController();
+
   const { lat, lng } = e.latlng;
   const radius = Number(radiusInput.value) || 500;
   const types = String(typesInput.value || "cafe")
@@ -62,11 +71,25 @@ map.on("click", async (e) => {
   clickMarker = L.marker([lat, lng]).addTo(map);
   radiusCircle = L.circle([lat, lng], { radius }).addTo(map);
 
+  isLoading = true;
   try {
-    const geojson = await fetchPois({ lat, lng, radius, types });
+    const geojson = await fetchPois({
+      lat,
+      lng,
+      radius,
+      types,
+      signal: currentAbort.signal
+    });
+
+    // Ignore late responses from previous clicks
+    if (mySeq !== requestSeq) return;
+
     renderGeoJson(geojson);
   } catch (err) {
-    alert(err.message);
+    // Ignore abort errors (they're expected)
+    if (err.name !== "AbortError") alert(err.message);
+  } finally {
+    if (mySeq === requestSeq) isLoading = false;
   }
 });
 
